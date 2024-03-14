@@ -127,8 +127,8 @@ class MainWindow(QMainWindow):
 
         # Create combo box for selecting modulation type
         self.modulation_combo = QComboBox()
-        self.modulation_combo.addItem("AM")
-        self.modulation_combo.addItem("FM")
+        self.modulation_combo.addItem("АM")
+        self.modulation_combo.addItem("ФM")
         self.modulation_combo.addItem("ЧМ")
         layout.addWidget(self.modulation_combo)
 
@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
         # Список словарей с данными о частоте, модуляции, тексте и пеленге
         data_list = [
             {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120},
-            {"Частота": 560, "Модуляция": "ЧM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
+            {"Частота": 560, "Модуляция": "АM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
             {"Частота": 1200, "Модуляция": "ФM", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
             # Добавьте другие словари с данными, если необходимо
         ]
@@ -221,10 +221,10 @@ class MainWindow(QMainWindow):
         # Поиск данных по частоте и модуляции в списке
         for data in data_list:
             if data["Частота"] == frequency and data["Модуляция"] == modulation:
-                message = f"Найдена ценная информация!\nЧастота: {frequency} МГц\nМодуляция: {modulation}\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
+                message = f"Найдена ценная информация!астота: {frequency} МГц\nМодуляция: {modulation}\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
                 break
         else:
-            message = "Шифрованные данные для данной частоты и модуляции не найдены."
+            message = "Шифрованные данные для данной частоты и модуляции не найдены.\n"
 
         self.message_edit.append(message)
 
@@ -234,7 +234,7 @@ class MainWindow(QMainWindow):
         # Список словарей с данными о частоте, модуляции, тексте и пеленге
         data_list = [
             {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120},
-            {"Частота": 560, "Модуляция": "ЧM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
+            {"Частота": 560, "Модуляция": "АM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
             {"Частота": 1200, "Модуляция": "ФM", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
             # Добавьте другие словари с данными, если необходимо
         ]
@@ -242,17 +242,17 @@ class MainWindow(QMainWindow):
         # Поиск данных для текущей модуляции в заданном диапазоне частот
         messages = []
         for data in data_list:
-            if data["Модуляция"] == modulation and abs(data["Частота"] - frequency) <= 20:
+            if data["Модуляция"] == modulation:
                 message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
                 messages.append(message)
 
         # Вывод всех найденных сообщений
         if messages:
-            self.message_edit.append(f"Найдена ценная информация для модуляции {modulation}:")
+            self.message_edit.append(f"Найдена ценная информация для модуляции {modulation}:\n")
             for msg in messages:
                 self.message_edit.append(msg)
         else:
-            self.message_edit.append(f"Шифрованные данные для текущей модуляции и частоты {frequency} не найдены.")
+            self.message_edit.append(f"Шифрованные данные для {modulation} модуляции и частоты {frequency} не найдены. \n")
 
 
 if __name__ == "__main__":
