@@ -15,10 +15,14 @@ class CircularScale(QWidget):
     def __init__(self, parent=None):
         super(CircularScale, self).__init__(parent)
         self.setMinimumSize(200, 200)
-        self.angle = 0
-        self.rl_angle = None  # Угол для отрисовки радиолинии
+        self.angle = None
+        # self.rl_angle = None  # Угол для отрисовки радиолинии
         self.rl_color = Qt.red  # Цвет для отрисовки радиолинии
         self.peleng_value = None  # Значение пеленга
+
+    def set_angle(self, angle):
+        self.angle = angle
+        self.update()  # Call update to trigger repaint
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -36,20 +40,23 @@ class CircularScale(QWidget):
             painter.drawLine(40, 0, 45, 0)
             painter.rotate(step)
 
-        painter.setPen(QPen(Qt.black, 4))
-        painter.drawLine(0, 0, 30, 0)
-
-        if self.rl_angle is not None:
-            painter.setPen(QPen(Qt.black, 4))
+        if self.angle is not None:
             painter.save()
-            painter.rotate(self.rl_angle)
+            painter.setPen(QPen(self.rl_color, 4))
+            painter.rotate(360 - self.angle)
             painter.drawLine(0, 0, 25, 0)
             painter.restore()
+        else:
+            painter.setPen(QPen(Qt.black, 4))
+            painter.drawLine(0, 0, 0, -30)
 
-            # Отображение значения пеленга в круге
-            if self.peleng_value is not None:
-                painter.drawText(QRectF(-5, -55, 40, 20), Qt.AlignCenter, str(self.peleng_value))
-                painter.drawText(QRectF(-15, -30, 60, 20), Qt.AlignCenter, "Пеленг")
+
+        # Отображение значения пеленга в круге
+        if self.peleng_value is not None:
+            painter.drawText(QRectF(-5, -55, 40, 20), Qt.AlignCenter, str(self.peleng_value))
+            painter.drawText(QRectF(-15, -30, 60, 20), Qt.AlignCenter, "Пеленг")
+
+
 
 
 class SinGraphAnimation(QMainWindow):
@@ -146,8 +153,9 @@ class SinGraphAnimation(QMainWindow):
         self.tab2_sub_tab_widget.hide()
         self.tab2_layout.addWidget(self.tab2_sub_tab_widget)
 
-        self.tab2_sub_tab_widget.addTab(self.suppresion_tab, "Подавление")
         self.tab2_sub_tab_widget.addTab(self.control_tab, "Контроль")
+        self.tab2_sub_tab_widget.addTab(self.suppresion_tab, "Подавление")
+
 
         self.control_layer = QVBoxLayout(self.control_tab)
         self.suppresion_layer = QVBoxLayout(self.suppresion_tab)
@@ -202,9 +210,9 @@ class SinGraphAnimation(QMainWindow):
 
         # Create combo box for selecting modulation type
         self.modulation_combo = QComboBox()
-        self.modulation_combo.addItem("AM")
-        self.modulation_combo.addItem("FM")
+        self.modulation_combo.addItem("АМ")
         self.modulation_combo.addItem("ЧМ")
+        self.modulation_combo.addItem("ФМ")
         self.control_layer.addWidget(self.modulation_combo)
 
         # Create button for starting search
@@ -520,7 +528,7 @@ class SinGraphAnimation(QMainWindow):
             self.timer.stop()
             self.setup_button.hide()
             self.circular_scale.show()
-
+            self.progress_bar.hide()
 
     def start_search(self):
         frequency = self.freq_slider.value()
@@ -528,19 +536,21 @@ class SinGraphAnimation(QMainWindow):
 
         # Список словарей с данными о частоте, модуляции, тексте и пеленге
         data_list = [
-            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120},
-            {"Частота": 560, "Модуляция": "ЧM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
-            {"Частота": 1200, "Модуляция": "ФM", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
+            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре",
+             "Пеленг": 120},
+            {"Частота": 560, "Модуляция": "АM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два",
+             "Пеленг": 90},
+            {"Частота": 1200, "Модуляция": "ФМ", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
             # Добавьте другие словари с данными, если необходимо
         ]
 
         # Поиск данных по частоте и модуляции в списке
         for data in data_list:
             if data["Частота"] == frequency and data["Модуляция"] == modulation:
-                message = f"Найдена ценная информация!\nЧастота: {frequency} МГц\nМодуляция: {modulation}\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
+                message = f"Найдена ценная информация!астота: {frequency} МГц\nМодуляция: {modulation}\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
                 break
         else:
-            message = "Шифрованные данные для данной частоты и модуляции не найдены."
+            message = "Шифрованные данные для данной частоты и модуляции не найдены.\n"
 
         self.message_edit.append(message)
 
@@ -549,26 +559,34 @@ class SinGraphAnimation(QMainWindow):
         modulation = self.modulation_combo.currentText()
         # Список словарей с данными о частоте, модуляции, тексте и пеленге
         data_list = [
-            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120},
-            {"Частота": 560, "Модуляция": "ЧM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
-            {"Частота": 1200, "Модуляция": "ФM", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
+            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре",
+             "Пеленг": 120},
+            {"Частота": 560, "Модуляция": "АМ", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два",
+             "Пеленг": 90},
+            {"Частота": 1200, "Модуляция": "ФМ", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
             # Добавьте другие словари с данными, если необходимо
         ]
 
-        # Поиск данных для текущей модуляции в заданном диапазоне частот
+        # Вывод сообщения о начале циклического поиска
+        # self.message_edit.append(f"Начинаю циклический поиск по заданному диапазону частот, по заданной модуляции.")
+        # QTimer.singleShot(7000)  # Задержка перед выводом результатов - 7 секунд
         messages = []
         for data in data_list:
-            if data["Модуляция"] == modulation and abs(data["Частота"] - frequency) <= 20:
+            if data["Модуляция"] == modulation:
                 message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
+                self.circular_scale.set_angle(data['Пеленг'])
+                # Need to change angle of CircularScale to ata['Пеленг'] angles
                 messages.append(message)
 
-        # Вывод всех найденных сообщений
+        # Вывод всех найденных сообщений с задержкой
+
         if messages:
             self.message_edit.append(f"Найдена ценная информация для модуляции {modulation}:")
             for msg in messages:
-                self.message_edit.append(msg)
+                QTimer.singleShot(1000,
+                                  lambda msg=msg: self.message_edit.append(msg))  # Добавление задержки 1000 мс (1 с)
         else:
-            self.message_edit.append(f"Шифрованные данные для текущей модуляции и частоты {frequency} не найдены.")
+            self.message_edit.append(f"Шифрованные данные для {modulation} модуляции и частоты {frequency} не найдены.")
 
 
 if __name__ == '__main__':
