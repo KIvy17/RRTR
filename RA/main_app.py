@@ -2,18 +2,63 @@ import random
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QTabWidget, QComboBox, QSlider, QLabel, QDoubleSpinBox
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QTabWidget, QComboBox,
+                             QSlider, QLabel, QDoubleSpinBox, QProgressBar, QLineEdit, QTextEdit,
+                             QHBoxLayout, )
+from PyQt5.QtGui import QPainter, QPen, QFont
 from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+
+
+class CircularScale(QWidget):
+    def __init__(self, parent=None):
+        super(CircularScale, self).__init__(parent)
+        self.setMinimumSize(200, 200)
+        self.angle = 0
+        self.rl_angle = None  # Угол для отрисовки радиолинии
+        self.rl_color = Qt.red  # Цвет для отрисовки радиолинии
+        self.peleng_value = None  # Значение пеленга
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        side = min(self.width(), self.height())
+        painter.setViewport((self.width() - side) // 2, (self.height() - side) // 2, side, side)
+        painter.setWindow(-50, -50, 100, 100)
+
+        scale = 360 / 23  # 360 degrees divided into 24 segments (15 degrees each)
+        step = 15
+        painter.setPen(QPen(Qt.black, 2))
+        font = QFont('Serif', 8)
+        painter.setFont(font)
+        for i in range(0, 360, step):
+            painter.drawLine(40, 0, 45, 0)
+            painter.rotate(step)
+
+        painter.setPen(QPen(Qt.black, 4))
+        painter.drawLine(0, 0, 30, 0)
+
+        if self.rl_angle is not None:
+            painter.setPen(QPen(Qt.black, 4))
+            painter.save()
+            painter.rotate(self.rl_angle)
+            painter.drawLine(0, 0, 25, 0)
+            painter.restore()
+
+            # Отображение значения пеленга в круге
+            if self.peleng_value is not None:
+                painter.drawText(QRectF(-5, -55, 40, 20), Qt.AlignCenter, str(self.peleng_value))
+                painter.drawText(QRectF(-15, -30, 60, 20), Qt.AlignCenter, "Пеленг")
 
 
 class SinGraphAnimation(QMainWindow):
     def __init__(self):
         super().__init__()
+        # WINDOW 1
         self.freq_carrier = 20  # Частота несущего сигнала
         self.freq_modulator = 10  # Частота модулируемого сигнала
-        self.Fs = 600  # Частота дискретизации (Гц)
+        self.Fs = 1000  # Частота дискретизации (МГц)
         self.T = 3  # Длительность сигнала (секунды)
         self.N = self.Fs * self.T  # Количество отсчётов
         self.modulation_index = 1.0
@@ -23,13 +68,19 @@ class SinGraphAnimation(QMainWindow):
         self.carrier_signal = lambda t: np.sin(np.pi * self.freq_carrier * t)
         self.am_modulated_signal = lambda t: (1 + 0.5 * self.modulating_signal(t)) * self.carrier_signal(t)
         self.fm_modulated_signal = self.frequency_modulation
-        # self.pm_modulated_signal = lambda t: np.sin(2 * np.pi * (self.freq_carrier * t + 0.5 * np.trapz(self.modulating_signal(t), t)))
         self.pm_modulated_signal = self.phase_modulation
+
+        # WINDOW 2
+        self.setMinimumSize(200, 200)
+        self.angle = 0
+        self.rl_angle = None  # Угол для отрисовки радиолинии
+        self.rl_color = Qt.red  # Цвет для отрисовки радиолинии
+        self.peleng_value = None  # Значение пеленга
 
         self.setup_ui()
 
     def frequency_modulation(self, t):
-        modulator = np.sin(2.0 * np.pi * self.freq_modulator * t) * self.modulation_index
+        modulator = np.sin(np.pi * self.freq_modulator * t) * self.modulation_index
         product = np.zeros_like(modulator)
 
         for i, t in enumerate(t):
@@ -40,12 +91,9 @@ class SinGraphAnimation(QMainWindow):
     def phase_modulation(self, t):
         return np.cos(self.freq_carrier * np.pi * t + self.modulation_index * self.modulating_signal(t))
 
-    def setup_ui(self):
-        self.setWindowTitle('App')
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
-        self.layout.setAlignment(Qt.AlignCenter)  # Center align the layout
+    def setup_tab1(self):
+
+        self.tab1 = QWidget()
 
         self.start_button = QPushButton("Начать анимацию")
         self.start_button.clicked.connect(self.start_animation)
@@ -64,18 +112,16 @@ class SinGraphAnimation(QMainWindow):
         self.main_tab_widget.hide()
         self.layout.addWidget(self.main_tab_widget)
 
-        self.tab1 = QWidget()
-        self.tab2 = QWidget()
         self.main_tab_widget.addTab(self.tab1, "Радиоанализ")
-        self.main_tab_widget.addTab(self.tab2, "Радиоконтроль")
+
+        self.dynamic_tab = QWidget()
+        self.static_tab = QWidget()
 
         self.tab1_layout = QVBoxLayout(self.tab1)
         self.tab1_sub_tab_widget = QTabWidget()
         self.tab1_sub_tab_widget.hide()
         self.tab1_layout.addWidget(self.tab1_sub_tab_widget)
 
-        self.dynamic_tab = QWidget()
-        self.static_tab = QWidget()
         self.tab1_sub_tab_widget.addTab(self.dynamic_tab, "Модуляция")
         self.tab1_sub_tab_widget.addTab(self.static_tab, "Спектр")
 
@@ -86,6 +132,119 @@ class SinGraphAnimation(QMainWindow):
 
         self.static_layout = QVBoxLayout(self.static_tab)
         self.plot_static_graphs()
+
+    def setup_tab2(self):
+        self.tab2 = QWidget()
+
+        self.main_tab_widget.addTab(self.tab2, "Радиоконтроль")
+
+        self.suppresion_tab = QWidget()
+        self.control_tab = QWidget()
+
+        self.tab2_layout = QVBoxLayout(self.tab2)
+        self.tab2_sub_tab_widget = QTabWidget()
+        self.tab2_sub_tab_widget.hide()
+        self.tab2_layout.addWidget(self.tab2_sub_tab_widget)
+
+        self.tab2_sub_tab_widget.addTab(self.suppresion_tab, "Подавление")
+        self.tab2_sub_tab_widget.addTab(self.control_tab, "Контроль")
+
+        self.control_layer = QVBoxLayout(self.control_tab)
+        self.suppresion_layer = QVBoxLayout(self.suppresion_tab)
+
+        # Create line edits for callsign and coordinates
+        self.callsign_edit = QLineEdit()
+        self.callsign_edit.setPlaceholderText("Введите позывной")
+
+        self.control_layer.addWidget(self.callsign_edit)
+
+        self.coordinates_edit = QLineEdit()
+        self.coordinates_edit.setPlaceholderText("Введите координаты")
+        self.control_layer.addWidget(self.coordinates_edit)
+
+        # Create labels for displaying callsign and coordinates
+        self.callsign_label = QLabel()
+        self.coordinates_label = QLabel()
+
+        # Add labels to layout
+        self.control_layer.addWidget(self.callsign_label)
+        self.control_layer.addWidget(self.coordinates_label)
+
+        # Create button for starting device setup
+        self.setup_button = QPushButton("Диагностика оборудования")
+        self.setup_button.clicked.connect(self.start_setup)
+        self.control_layer.addWidget(self.setup_button)
+
+        # Create progress bar for device setup
+        self.progress_bar = QProgressBar()
+        self.control_layer.addWidget(self.progress_bar)
+
+        # Create circular scale widget
+        self.circular_scale = CircularScale()
+        self.control_layer.addWidget(self.circular_scale)
+        self.circular_scale.hide()
+
+        # Create sliders for selecting frequency
+        freq_slider_layout = QHBoxLayout()
+        self.control_layer.addLayout(freq_slider_layout)
+
+        self.freq_label = QLabel("Выбранная частота: 20 МГц")
+        freq_slider_layout.addWidget(self.freq_label)
+
+        self.freq_slider = QSlider(Qt.Horizontal)
+        self.freq_slider.setMinimum(20)
+        self.freq_slider.setMaximum(2000)
+        self.freq_slider.setValue(20)
+        self.freq_slider.setTickInterval(100)
+        self.freq_slider.setTickPosition(QSlider.TicksBelow)
+        self.freq_slider.valueChanged.connect(self.update_freq_label)
+        freq_slider_layout.addWidget(self.freq_slider)
+
+        # Create combo box for selecting modulation type
+        self.modulation_combo = QComboBox()
+        self.modulation_combo.addItem("AM")
+        self.modulation_combo.addItem("FM")
+        self.modulation_combo.addItem("ЧМ")
+        self.control_layer.addWidget(self.modulation_combo)
+
+        # Create button for starting search
+        self.search_button = QPushButton("Поиск")
+        self.search_button.setEnabled(False)
+        self.search_button.clicked.connect(self.start_search)
+        self.control_layer.addWidget(self.search_button)
+
+        # Create button for starting search 2
+        self.search_2_button = QPushButton("Поиск 2")
+        self.search_2_button.setEnabled(False)
+        self.search_2_button.clicked.connect(self.start_search_2)
+        self.control_layer.addWidget(self.search_2_button)
+
+        # Create text edit for displaying messages
+        self.message_edit = QTextEdit()
+        self.message_edit.setReadOnly(True)
+        self.control_layer.addWidget(self.message_edit)
+
+        # Create buttons for suppression tab
+        adaptive_button = QPushButton("Адаптивный режим")
+        control_button = QPushButton("Контроль")
+        reconnaissance_button = QPushButton("Доразведка")
+        manual_button = QPushButton("Ручной режим")
+
+        self.suppresion_layer.addWidget(adaptive_button)
+        self.suppresion_layer.addWidget(control_button)
+        self.suppresion_layer.addWidget(reconnaissance_button)
+        self.suppresion_layer.addWidget(manual_button)
+
+    def setup_ui(self):
+        self.setWindowTitle('App')
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+        self.layout.setAlignment(Qt.AlignCenter)  # Center align the layout
+
+        self.setup_tab1()
+        self.setup_tab2()
+
 
     def plot_static_graphs(self, modulation_type=None, modulated_signal=None):
         if not modulation_type:
@@ -106,14 +265,14 @@ class SinGraphAnimation(QMainWindow):
         fig1, self.static_ax1 = plt.subplots()
         self.static_ax1.plot(self.t, current_modulated_signal(self.t))
         self.static_ax1.set_title(f'{current_modulation_type} модуляция')
-        self.static_ax1.set_xlabel(f'Время')
-        self.static_ax1.set_ylabel(f'Частота')
+        self.static_ax1.set_xlabel(f'Время, с')
+        self.static_ax1.set_ylabel(f'Частота, МГц')
 
         fig2, self.static_ax2 = plt.subplots()
         self.static_ax2.plot(positive_frequencies, positive_am_freq_spectrum)
         self.static_ax2.set_title(f'Спектр сигнала')
-        self.static_ax2.set_xlabel(f'Частота')
-        self.static_ax2.set_ylabel(f'Амплитуда')
+        self.static_ax2.set_xlabel(f'Частота, МГц')
+        self.static_ax2.set_ylabel(f'Амплитуда, дБ')
         plt.setp(self.static_ax2, xlim=[-50, 50])
 
         canvas1 = FigureCanvas(fig1)
@@ -136,9 +295,6 @@ class SinGraphAnimation(QMainWindow):
                 self.start_button.deleteLater()
                 self.start_button = None
 
-                # self.refresh_button = QPushButton("Refresh Parameter")
-                # self.refresh_button.clicked.connect(self.refresh_parameter)
-                # Slider for carrier frequency
                 self.freq_carrier_slider = QSlider(Qt.Horizontal)
                 self.freq_carrier_slider.setMinimum(0)
                 self.freq_carrier_slider.setMaximum(50)
@@ -149,7 +305,7 @@ class SinGraphAnimation(QMainWindow):
                 self.carrier_frequency_label = QLabel(str(self.freq_carrier_slider.value()))
                 self.freq_carrier_slider.valueChanged.connect(self.update_carrier_frequency_label)
 
-                self.dynamic_layout.addWidget(QLabel("Частота несущего сигнала, Гц"))
+                self.dynamic_layout.addWidget(QLabel("Частота несущего сигнала, МГц"))
                 self.dynamic_layout.addWidget(self.freq_carrier_slider)
                 self.dynamic_layout.addWidget(self.carrier_frequency_label)  # Add the label below the slider
 
@@ -164,8 +320,7 @@ class SinGraphAnimation(QMainWindow):
                 self.modulator_frequency_label = QLabel(str(self.freq_modulator_slider.value()))
                 self.freq_modulator_slider.valueChanged.connect(self.update_modulator_frequency_label)
 
-
-                self.dynamic_layout.addWidget(QLabel("Частота модулирующего сигнала, Гц"))
+                self.dynamic_layout.addWidget(QLabel("Частота модулирующего сигнала, МГц"))
                 self.dynamic_layout.addWidget(self.freq_modulator_slider)
                 self.dynamic_layout.addWidget(self.modulator_frequency_label)
 
@@ -178,7 +333,7 @@ class SinGraphAnimation(QMainWindow):
 
                 # Create a QLabel to display the current value of the modulator frequency slider
                 self.modulation_index_label = QLabel(str(self.modulation_index_slider.value()))
-                self.modulation_index_slider.valueChanged.connect(self.update_modulator_frequency_label)
+                self.modulation_index_slider.valueChanged.connect(self.update_modulation_index_label)
 
                 self.dynamic_layout.addWidget(QLabel("Коэффициент модуляции"))
                 self.dynamic_layout.addWidget(self.modulation_index_slider)
@@ -199,6 +354,7 @@ class SinGraphAnimation(QMainWindow):
 
             self.main_tab_widget.show()
             self.tab1_sub_tab_widget.show()
+            self.tab2_sub_tab_widget.show()
 
             if not carrier_signal:
                 self.current_carrier_signal = self.carrier_signal
@@ -227,9 +383,9 @@ class SinGraphAnimation(QMainWindow):
             self.ax3.set_xlabel('Время')
 
             # Add y-labels
-            self.ax1.set_ylabel('Частота')
-            self.ax2.set_ylabel('Частота')
-            self.ax3.set_ylabel('Частота')
+            self.ax1.set_ylabel('Амплитуда, дБ')
+            self.ax2.set_ylabel('Амплитуда, дБ')
+            self.ax3.set_ylabel('Амплитуда, дБ')
 
             self.animation1 = FuncAnimation(self.figure1, self.update_plot1, frames=200, interval=50)
             self.animation2 = FuncAnimation(self.figure2, self.update_plot2, frames=200, interval=50)
@@ -322,16 +478,104 @@ class SinGraphAnimation(QMainWindow):
         self.carrier_frequency_label.setText(str(value))
 
     def update_modulator_frequency_label(self, value):
-        self.modulation_index_label.setText(str(value))
+        self.modulator_frequency_label.setText(str(value))
 
     def update_modulation_index_label(self, value):
-        self.mo.setText(str(value))
+        self.modulation_index_label.setText(str(value))
+
+    def update_freq_label(self, value):
+        self.freq_label.setText(f"Выбранная частота: {value} МГц")
+
+    def start_setup(self):
+        # Get callsign and coordinates entered by the user
+        callsign = self.callsign_edit.text()
+        coordinates = self.coordinates_edit.text()
+
+        if callsign.strip() == "" or coordinates.strip() == "":
+            self.message_edit.append("Введите позывной и координаты.")
+            return
+
+        # Display callsign and coordinates
+        self.callsign_label.setText("Позывной: " + callsign)
+        self.coordinates_label.setText("Координаты: " + coordinates)
+
+        # Proceed with device setup
+        self.setup_button.setEnabled(False)
+        self.progress_bar.setValue(0)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_progress)
+        self.timer.start(500)
+
+    def update_progress(self):
+        value = self.progress_bar.value()
+        if value < 100:
+            value += 10
+            self.progress_bar.setValue(value)
+        else:
+            self.setup_button.setEnabled(True)
+            self.freq_slider.setEnabled(True)
+            self.modulation_combo.setEnabled(True)
+            self.search_button.setEnabled(True)
+            self.search_2_button.setEnabled(True)
+            self.timer.stop()
+            self.setup_button.hide()
+            self.circular_scale.show()
+
+
+    def start_search(self):
+        frequency = self.freq_slider.value()
+        modulation = self.modulation_combo.currentText()
+
+        # Список словарей с данными о частоте, модуляции, тексте и пеленге
+        data_list = [
+            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120},
+            {"Частота": 560, "Модуляция": "ЧM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
+            {"Частота": 1200, "Модуляция": "ФM", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
+            # Добавьте другие словари с данными, если необходимо
+        ]
+
+        # Поиск данных по частоте и модуляции в списке
+        for data in data_list:
+            if data["Частота"] == frequency and data["Модуляция"] == modulation:
+                message = f"Найдена ценная информация!\nЧастота: {frequency} МГц\nМодуляция: {modulation}\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
+                break
+        else:
+            message = "Шифрованные данные для данной частоты и модуляции не найдены."
+
+        self.message_edit.append(message)
+
+    def start_search_2(self):
+        frequency = self.freq_slider.value()  # Получаем текущее значение частоты
+        modulation = self.modulation_combo.currentText()
+        # Список словарей с данными о частоте, модуляции, тексте и пеленге
+        data_list = [
+            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120},
+            {"Частота": 560, "Модуляция": "ЧM", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
+            {"Частота": 1200, "Модуляция": "ФM", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225}
+            # Добавьте другие словари с данными, если необходимо
+        ]
+
+        # Поиск данных для текущей модуляции в заданном диапазоне частот
+        messages = []
+        for data in data_list:
+            if data["Модуляция"] == modulation and abs(data["Частота"] - frequency) <= 20:
+                message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
+                messages.append(message)
+
+        # Вывод всех найденных сообщений
+        if messages:
+            self.message_edit.append(f"Найдена ценная информация для модуляции {modulation}:")
+            for msg in messages:
+                self.message_edit.append(msg)
+        else:
+            self.message_edit.append(f"Шифрованные данные для текущей модуляции и частоты {frequency} не найдены.")
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = SinGraphAnimation()
     window.setGeometry(600, 100, 800, 1200)  # Adjusted height to accommodate the tab widget
+    window.setWindowTitle("РРТР")
     # window.showMaximized()
     window.show()
     sys.exit(app.exec_())
