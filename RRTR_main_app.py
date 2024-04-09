@@ -1,6 +1,9 @@
 import random
 import sys
+from functools import partial
+
 import numpy as np
+from scipy.fft import fft, fftfreq
 import matplotlib.pyplot as plt
 from PyQt5.QtCore import Qt, QTimer, QSize, QPoint
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QTabWidget, QComboBox,
@@ -51,8 +54,8 @@ class CircularScale(QWidget):
                 if self.distance_between is None:
                     self.distance_between = random.randint(150, 300)
                 enemy_point = QPoint(
-                    int(center.x() + self.distance_between * np.cos(self.angle)),
-                    int(center.y() + self.distance_between * np.sin(self.angle))
+                    int(center.x() + self.distance_between * np.cos(self.angle * np.pi / 180)),
+                    int(center.y() - self.distance_between * np.sin(self.angle * np.pi / 180))
                 )
 
                 painter.setPen(QPen(Qt.blue, 8))
@@ -103,12 +106,12 @@ class SinGraphAnimation(QMainWindow):
         self.Fs = 1000  # Частота дискретизации (МГц)
         self.T = 3  # Длительность сигнала (секунды)
         self.N = self.Fs * self.T  # Количество отсчётов
-        self.modulation_index = 1.0
+        self.modulation_index = 1
         self.t = np.linspace(1, self.T, self.N, endpoint=False)
 
-        self.modulating_signal = lambda t: np.cos(np.pi * t * self.freq_modulator)
+        self.modulating_signal = self.modulating_signal_func
         self.carrier_signal = lambda t: np.sin(np.pi * self.freq_carrier * t)
-        self.am_modulated_signal = lambda t: (1 + 0.5 * self.modulating_signal(t)) * self.carrier_signal(t)
+        self.am_modulated_signal = lambda t: (1 + 0.5 * self.modulating_signal_func(t)) * self.carrier_signal(t)
         self.fm_modulated_signal = self.frequency_modulation
         self.pm_modulated_signal = self.phase_modulation
 
@@ -126,6 +129,11 @@ class SinGraphAnimation(QMainWindow):
             # Add other dictionaries as needed
         ]
         self.setup_ui()
+
+    def modulating_signal_func(self, t):
+        main_wave = np.cos(np.pi * t * self.freq_modulator)
+
+        return main_wave + np.sum(0.5 ** k * np.cos(3 ** k * np.pi * t * self.freq_modulator) for k in range(1, self.modulation_index))
 
     def frequency_modulation(self, t):
         modulator = np.sin(np.pi * self.freq_modulator * t) * self.modulation_index
@@ -293,8 +301,8 @@ class SinGraphAnimation(QMainWindow):
             current_modulation_type = modulation_type
             current_modulated_signal = modulated_signal
 
-        am_freq_spectrum = np.abs(np.fft.fft(current_modulated_signal(self.t)))
-        frequencies = np.fft.fftfreq(len(current_modulated_signal(self.t)), 1 / self.Fs)
+        am_freq_spectrum = np.abs(fft(current_modulated_signal(self.t)))
+        frequencies = fftfreq(self.N, 1 / self.Fs)
 
         # Filter frequencies and spectrum for t > 0
         positive_indices = frequencies != 0
@@ -308,7 +316,7 @@ class SinGraphAnimation(QMainWindow):
         self.static_ax1.set_ylabel(f'Амплитуда, дБ')
 
         fig2, self.static_ax2 = plt.subplots()
-        self.static_ax2.plot(positive_frequencies, positive_am_freq_spectrum)
+        self.static_ax2.plot(frequencies * 3, am_freq_spectrum)
         self.static_ax2.set_title(f'Спектр сигнала')
         self.static_ax2.set_xlabel(f'Частота, МГц')
         self.static_ax2.set_ylabel(f'Амплитуда, дБ')
@@ -336,7 +344,7 @@ class SinGraphAnimation(QMainWindow):
 
                 self.freq_carrier_slider = QSlider(Qt.Horizontal)
                 self.freq_carrier_slider.setMinimum(0)
-                self.freq_carrier_slider.setMaximum(50)
+                self.freq_carrier_slider.setMaximum(30)
                 self.freq_carrier_slider.setValue(int(self.freq_carrier))
                 self.freq_carrier_slider.valueChanged.connect(self.update_freq_carrier)
 
@@ -351,7 +359,7 @@ class SinGraphAnimation(QMainWindow):
                 # Slider for modulator frequency
                 self.freq_modulator_slider = QSlider(Qt.Horizontal)
                 self.freq_modulator_slider.setMinimum(0)
-                self.freq_modulator_slider.setMaximum(50)
+                self.freq_modulator_slider.setMaximum(30)
                 self.freq_modulator_slider.setValue(int(self.freq_modulator))
                 self.freq_modulator_slider.valueChanged.connect(self.update_freq_modulator)
 
@@ -365,8 +373,8 @@ class SinGraphAnimation(QMainWindow):
 
                 # Slider for modulation index
                 self.modulation_index_slider = QSlider(Qt.Horizontal)
-                self.modulation_index_slider.setMinimum(0)
-                self.modulation_index_slider.setMaximum(10)
+                self.modulation_index_slider.setMinimum(1)
+                self.modulation_index_slider.setMaximum(5)
                 self.modulation_index_slider.setValue(int(self.modulation_index))
                 self.modulation_index_slider.valueChanged.connect(self.update_modulation_index)
 
@@ -374,7 +382,7 @@ class SinGraphAnimation(QMainWindow):
                 self.modulation_index_label = QLabel(str(self.modulation_index_slider.value()))
                 self.modulation_index_slider.valueChanged.connect(self.update_modulation_index_label)
 
-                self.dynamic_layout.addWidget(QLabel("Коэффициент модуляции"))
+                self.dynamic_layout.addWidget(QLabel("Количество гармоник"))
                 self.dynamic_layout.addWidget(self.modulation_index_slider)
                 self.dynamic_layout.addWidget(self.modulation_index_label)
 
@@ -409,10 +417,13 @@ class SinGraphAnimation(QMainWindow):
             self.random_parameter = np.random.randint(1, 9)  # Random parameter from 1 to 5
             self.line1, = self.ax1.plot(self.t, self.current_carrier_signal(self.t), '-')
             self.line2, = self.ax2.plot(self.t, self.current_modulating_signal(self.t), '-')
+            # self.line2, = self.ax2.plot(self.t, self.modulating_signal_func(self.t), '-')
             self.line3, = self.ax3.plot(self.t, self.current_modulated_signal(self.t), '-')
             self.ax1.autoscale(enable=True, axis='both', tight=None)
             self.ax2.autoscale(enable=True, axis='both', tight=None)
             self.ax3.autoscale(enable=True, axis='both', tight=None)
+            plt.setp(self.ax2, ylim=[-2, 2])
+            plt.setp(self.ax3, ylim=[-2, 2])
             self.ax1.set_title(f'Несущий сигнал')
             self.ax2.set_title(f'Модулирующий сигнал')
             self.ax3.set_title(f'Модулированный сигнал')
@@ -576,33 +587,45 @@ class SinGraphAnimation(QMainWindow):
         self.message_edit.append(message)
 
     def start_search_2(self):
-        frequency = self.freq_slider.value()
         modulation = self.modulation_combo.currentText()
         self.message_edit.clear()
 
         self.message_edit.append(f"Начинаю циклический поиск по заданному диапазону частот, по заданной модуляции.")
         messages = []
+        found_frequency = None  # Переменная для хранения пойманной частоты
         for data in self.data_list:
             if data["Модуляция"] == modulation:
                 message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
                 self.circular_scale.set_angle(90 - data['Пеленг'])
                 messages.append(message)
+                found_frequency = data['Частота']  # Сохраняем пойманную частоту
 
         if messages:
             self.message_edit.append(f"Найдена ценная информация для модуляции {modulation}:\n")
             for msg in messages:
-                QTimer.singleShot(1000, lambda msg=msg: self.message_edit.append(msg))
+                QTimer.singleShot(1000, partial(self.message_edit.append, msg))
         else:
-            self.message_edit.append(f"Шифрованные данные для {modulation} модуляции и частоты {frequency} не найдены.\n")
+            self.message_edit.append(
+                f"Шифрованные данные для {modulation} модуляции и частоты {found_frequency} не найдены.\n")
+
+        if found_frequency is not None:
+            QTimer.singleShot(1000, partial(self.freq_slider.setValue,
+                                            found_frequency))  # Устанавливаем значение слайдера частоты на пойманную частоту
 
     def substitute_chars(self):
-        for idx, data in enumerate(self.data_list):
-            text = data["Текст"]
-            length = len(text)
-            num_chars_to_replace = int(length * 0.8)
-            indices_to_replace = random.sample(range(length), num_chars_to_replace)
-            new_text = ''.join(c if i not in indices_to_replace else '*' for i, c in enumerate(text))
-            self.data_list[idx]["Текст"] = new_text
+        frequency = self.freq_slider.value()
+        modulation = self.modulation_combo.currentText()
+
+        for data in self.data_list:
+            if data["Частота"] == frequency and data["Модуляция"] == modulation:
+                text = data["Текст"]
+                length = len(text)
+                num_chars_to_replace = int(length * 0.8)
+                indices_to_replace = random.sample(range(length), num_chars_to_replace)
+                new_text = ''.join(c if i not in indices_to_replace else '*' for i, c in enumerate(text))
+                data["Текст"] = new_text
+                self.message_edit.append(f" Подавление частоты {frequency} МГц и модуляции '{modulation}'")
+                break
 
        
         
