@@ -2,11 +2,11 @@ import random
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSize, QPoint
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QTabWidget, QComboBox,
                              QSlider, QLabel, QDoubleSpinBox, QProgressBar, QLineEdit, QTextEdit,
-                             QHBoxLayout, )
-from PyQt5.QtGui import QPainter, QPen, QFont
+                             QHBoxLayout)
+from PyQt5.QtGui import QPainter, QPen, QFont, QPixmap, QImage
 from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -14,11 +14,23 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 class CircularScale(QWidget):
     def __init__(self, parent=None):
         super(CircularScale, self).__init__(parent)
-        self.setMinimumSize(200, 200)
         self.angle = None
-        # self.rl_angle = None  # Угол для отрисовки радиолинии
-        self.rl_color = Qt.red  # Цвет для отрисовки радиолинии
-        self.peleng_value = None  # Значение пеленга
+        self.rl_color = Qt.red
+        self.peleng_value = None
+        self.background_image = QPixmap("./img/map.jpg")  # Change to your image path
+        self.setMinimumSize(self.background_image.size())
+        self.distance_between = None
+
+        # Initialize QTimer for blinking points
+        self.blink_timer = QTimer(self)
+        self.blink_timer.timeout.connect(self.toggle_points)
+        self.blink_state = True  # Initial state of blinking
+        self.blink_timer.start(500)  # Adjust the interval as needed
+
+    def toggle_points(self):
+        # Toggle the state of blinking points
+        self.blink_state = not self.blink_state
+        self.update()
 
     def set_angle(self, angle):
         self.angle = angle
@@ -27,10 +39,34 @@ class CircularScale(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        side = min(self.width(), self.height())
-        painter.setViewport((self.width() - side) // 2, (self.height() - side) // 2, side, side)
+
+        # Draw the background image
+        painter.drawPixmap(self.rect(), self.background_image)
+
+        center = self.rect().center()
+        if self.blink_state:
+            painter.setPen(QPen(self.rl_color, 8))
+            painter.drawPoint(center)
+            if self.angle is not None:
+                if self.distance_between is None:
+                    self.distance_between = random.randint(150, 300)
+                enemy_point = QPoint(
+                    int(center.x() + self.distance_between * np.cos(self.angle)),
+                    int(center.y() + self.distance_between * np.sin(self.angle))
+                )
+
+                painter.setPen(QPen(Qt.blue, 8))
+                painter.drawPoint(enemy_point)
+
+        else:
+            painter.setPen(Qt.transparent)  # Make the point transparent
+
+        # # Set viewport and window to encompass the background image and drawn items
+        side = min(self.width() // 5, self.height() // 5)
+        painter.setViewport((self.width() - side), (self.height() - side), side, side)
         painter.setWindow(-50, -50, 100, 100)
 
+        # Draw circular scale
         scale = 360 / 23  # 360 degrees divided into 24 segments (15 degrees each)
         step = 15
         painter.setPen(QPen(Qt.black, 2))
@@ -49,7 +85,6 @@ class CircularScale(QWidget):
         else:
             painter.setPen(QPen(Qt.black, 4))
             painter.drawLine(0, 0, 0, -30)
-
 
         # Отображение значения пеленга в круге
         if self.peleng_value is not None:
@@ -270,7 +305,7 @@ class SinGraphAnimation(QMainWindow):
         self.static_ax1.plot(self.t, current_modulated_signal(self.t))
         self.static_ax1.set_title(f'{current_modulation_type} модуляция')
         self.static_ax1.set_xlabel(f'Время, с')
-        self.static_ax1.set_ylabel(f'Частота, МГц')
+        self.static_ax1.set_ylabel(f'Амплитуда, дБ')
 
         fig2, self.static_ax2 = plt.subplots()
         self.static_ax2.plot(positive_frequencies, positive_am_freq_spectrum)
@@ -512,7 +547,7 @@ class SinGraphAnimation(QMainWindow):
 
     def update_progress(self):
         value = self.progress_bar.value()
-        if value < 100:
+        if value < 20:
             value += 10
             self.progress_bar.setValue(value)
         else:
@@ -530,6 +565,7 @@ class SinGraphAnimation(QMainWindow):
     def start_search(self):
         frequency = self.freq_slider.value()
         modulation = self.modulation_combo.currentText()
+        self.message_edit.clear()
 
         message = "Информативного сигнала не обнаружено.\n"
         for data in self.data_list:
@@ -542,12 +578,13 @@ class SinGraphAnimation(QMainWindow):
     def start_search_2(self):
         frequency = self.freq_slider.value()
         modulation = self.modulation_combo.currentText()
+        self.message_edit.clear()
 
         self.message_edit.append(f"Начинаю циклический поиск по заданному диапазону частот, по заданной модуляции.")
         messages = []
         for data in self.data_list:
             if data["Модуляция"] == modulation:
-                message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов\n"
+                message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
                 self.circular_scale.set_angle(90 - data['Пеленг'])
                 messages.append(message)
 
@@ -574,6 +611,7 @@ if __name__ == '__main__':
     window = SinGraphAnimation()
     window.setGeometry(600, 100, 800, 1200)  # Adjusted height to accommodate the tab widget
     window.setWindowTitle("РРТР")
+
     # window.showMaximized()
     window.show()
     sys.exit(app.exec_())
