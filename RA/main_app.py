@@ -274,7 +274,7 @@ class SinGraphAnimation(QMainWindow):
         self.static_ax1.plot(self.t, current_modulated_signal(self.t))
         self.static_ax1.set_title(f'{current_modulation_type} модуляция')
         self.static_ax1.set_xlabel(f'Время, с')
-        self.static_ax1.set_ylabel(f'Частота, МГц')
+        self.static_ax1.set_ylabel(f'Амплитуда, дБ')
 
         fig2, self.static_ax2 = plt.subplots()
         self.static_ax2.plot(positive_frequencies, positive_am_freq_spectrum)
