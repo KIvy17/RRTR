@@ -17,7 +17,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 class CircularScale(QWidget):
     def __init__(self, parent=None):
         super(CircularScale, self).__init__(parent)
-        self.angle = None
+        self.angle_dict: [dict, None] = None
         self.rl_color = Qt.red
         self.peleng_value = None
         self.background_image = QPixmap("./img/map.jpg")  # Change to your image path
@@ -36,7 +36,7 @@ class CircularScale(QWidget):
         self.update()
 
     def set_angle(self, angle):
-        self.angle = angle
+        self.angle_dict = angle
         self.update()  # Call update to trigger repaint
 
     def paintEvent(self, event):
@@ -50,16 +50,17 @@ class CircularScale(QWidget):
         if self.blink_state:
             painter.setPen(QPen(self.rl_color, 8))
             painter.drawPoint(center)
-            if self.angle is not None:
-                if self.distance_between is None:
-                    self.distance_between = random.randint(150, 300)
-                enemy_point = QPoint(
-                    int(center.x() + self.distance_between * np.cos(self.angle * np.pi / 180)),
-                    int(center.y() - self.distance_between * np.sin(self.angle * np.pi / 180))
-                )
-
-                painter.setPen(QPen(Qt.blue, 8))
-                painter.drawPoint(enemy_point)
+            if self.angle_dict:
+                for is_enemy, angle in self.angle_dict.items():
+                    if self.distance_between is None:
+                        self.distance_between = random.randint(150, 300)
+                    point = QPoint(
+                        int(center.x() + self.distance_between * np.cos(angle * np.pi / 180)),
+                        int(center.y() - self.distance_between * np.sin(angle * np.pi / 180))
+                    )
+                    color = Qt.blue if is_enemy else Qt.red
+                    painter.setPen(QPen(color, 8))
+                    painter.drawPoint(point)
 
         else:
             painter.setPen(Qt.transparent)  # Make the point transparent
@@ -79,12 +80,14 @@ class CircularScale(QWidget):
             painter.drawLine(40, 0, 45, 0)
             painter.rotate(step)
 
-        if self.angle is not None:
-            painter.save()
-            painter.setPen(QPen(self.rl_color, 4))
-            painter.rotate(360 - self.angle)
-            painter.drawLine(0, 0, 25, 0)
-            painter.restore()
+        if self.angle_dict:
+            for is_enemy, angle in self.angle_dict.items():
+                color = Qt.blue if is_enemy else Qt.red
+                painter.save()
+                painter.setPen(QPen(color, 4))
+                painter.rotate(360 - angle)
+                painter.drawLine(0, 0, 25, 0)
+                painter.restore()
         else:
             painter.setPen(QPen(Qt.black, 4))
             painter.drawLine(0, 0, 0, -30)
@@ -117,15 +120,16 @@ class SinGraphAnimation(QMainWindow):
 
         # WINDOW 2
         self.setMinimumSize(200, 200)
-        self.angle = 0
+        self.angle_dict = []
         self.rl_angle = None  # Угол для отрисовки радиолинии
         self.rl_color = Qt.red  # Цвет для отрисовки радиолинии
         self.peleng_value = None  # Значение пеленга
         self.data_list = [
-            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120},
-            {"Частота": 60, "Модуляция": "АМ", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90},
-            {"Частота": 1200, "Модуляция": "ФМ", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225},
-            {"Частота": 450, "Модуляция": "ЧМ", "Текст": "Roger roger, start operation immediately !", "Пеленг": 40}
+            {"Частота": 540, "Модуляция": "ЧМ", "Текст": "Ель, прием, я Ольха: сто двенадцать-двести двадцать четыре", "Пеленг": 120, "is_enemy": False},
+            {"Частота": 60, "Модуляция": "АМ", "Текст": "Ольха, прием, я Ель: сто пятьдесят один-сто тридцать два", "Пеленг": 90, "is_enemy": False},
+            {"Частота": 1200, "Модуляция": "ФМ", "Текст": "Олег, прием, я Молот: начинаю движение", "Пеленг": 225, "is_enemy": False},
+            {"Частота": 450, "Модуляция": "ЧМ", "Текст": "Roger roger, start operation immediately !", "Пеленг": 40, "is_enemy": True},
+            {"Частота": 450, "Модуляция": "ФМ", "Текст": "Enemy spotted, prepare fire postions!", "Пеленг": 40, "is_enemy": True}
             # Add other dictionaries as needed
         ]
         self.setup_ui()
@@ -133,7 +137,7 @@ class SinGraphAnimation(QMainWindow):
     def modulating_signal_func(self, t, freq_modulator, harm_count=1):
         main_wave = np.cos(np.pi * t * freq_modulator)
 
-        return main_wave + np.sum(0.5 ** k * np.cos(3 ** k * np.pi * t * freq_modulator) for k in range(1, harm_count))
+        return main_wave + sum(0.75 ** k * np.cos(3 ** k * np.pi * t * freq_modulator) for k in range(1, harm_count))
 
     def amplitude_modulation(self, t, freq_carrier, freq_modulator, harm_count=1):
         return (1 + 0.5 * self.modulating_signal_func(t, freq_modulator, harm_count)) * self.carrier_signal(t, freq_carrier)
@@ -299,9 +303,6 @@ class SinGraphAnimation(QMainWindow):
 
     def start_testing(self):
 
-        self.tab1.setEnabled(False)
-        self.tab2.setEnabled(False)
-
         if hasattr(self, "restart_button") and self.restart_button is not None:
             self.layout.removeWidget(self.restart_button)
             self.restart_button.deleteLater()
@@ -353,9 +354,9 @@ class SinGraphAnimation(QMainWindow):
             if self.current_question == 2:
                 self.question_label = QLabel(
                     f"Вопрос {self.current_question}: Получен сигнал, содержащий переговоры, перехваченный с \nпомощью SDRSharp. "
-                    f"Определите сколько гармоник в модулированном сигнале")
+                    f"Определите сколько гармоник в промодулированном сигнале")
                 self.answers = None
-                self.correct_answer.append("3")
+                self.correct_answer.append("4")
                 self.radio_answers = False
             else:
                 self.question_label = QLabel(
@@ -422,7 +423,7 @@ class SinGraphAnimation(QMainWindow):
 
         elif self.current_question == 9:
             harm_count, self.test_ax4 = plt.subplots()
-            self.test_ax4.plot(self.t, self.modulating_signal(self.t, 2, 3))
+            self.test_ax4.plot(self.t, self.modulating_signal(self.t, 2, 4))
             self.test_ax4.set_title(f'Модулирующий сигнал')
             self.test_ax4.set_xlabel(f'Время, с')
             self.test_ax4.set_ylabel(f'Амплитуда, дБ')
@@ -434,7 +435,7 @@ class SinGraphAnimation(QMainWindow):
                 f"Вопрос {self.current_question}: Сколько гармоник в модулирующем сигнале:")
             self.answers = None
             self.radio_answers = False
-            self.correct_answer.append("3")
+            self.correct_answer.append("4")
 
         elif self.current_question == 10:
             harm_count, self.test_ax4 = plt.subplots()
@@ -522,7 +523,6 @@ class SinGraphAnimation(QMainWindow):
             self.store_answer(self.free_text_edit)
 
         self.current_question += 1
-        print(f"Answer for question {self.current_question}: {self.user_answers}")
         self.clear_layout(self.test_tab_layout)
         self.start_testing()
 
@@ -537,9 +537,6 @@ class SinGraphAnimation(QMainWindow):
                     self.clear_layout(item.layout())
 
     def end_testing(self, mark, correct_answers):
-
-        self.tab1.setEnabled(True)
-        self.tab2.setEnabled(True)
         self.result_label = QLabel(f"{correct_answers}/10 правильных ответов. Ваш результат: {mark}.")
         self.result_label.setAlignment(Qt.AlignCenter)
         self.test_tab_layout.addWidget(self.result_label)
@@ -622,7 +619,7 @@ class SinGraphAnimation(QMainWindow):
                 # Slider for modulator frequency
                 self.freq_modulator_slider = QSlider(Qt.Horizontal)
                 self.freq_modulator_slider.setMinimum(0)
-                self.freq_modulator_slider.setMaximum(30)
+                self.freq_modulator_slider.setMaximum(15)
                 self.freq_modulator_slider.setValue(int(self.freq_modulator))
                 self.freq_modulator_slider.valueChanged.connect(self.update_freq_modulator)
 
@@ -684,8 +681,8 @@ class SinGraphAnimation(QMainWindow):
             self.ax1.autoscale(enable=True, axis='both', tight=None)
             self.ax2.autoscale(enable=True, axis='both', tight=None)
             self.ax3.autoscale(enable=True, axis='both', tight=None)
-            plt.setp(self.ax2, ylim=[-2, 2])
-            plt.setp(self.ax3, ylim=[-2, 2])
+            plt.setp(self.ax2, ylim=[-3, 3])
+            plt.setp(self.ax3, ylim=[-3, 3])
             self.ax1.set_title(f'Несущий сигнал')
             self.ax2.set_title(f'Модулирующий сигнал')
             self.ax3.set_title(f'Модулированный сигнал')
@@ -838,13 +835,16 @@ class SinGraphAnimation(QMainWindow):
     def start_search(self):
         frequency = self.freq_slider.value()
         modulation = self.modulation_combo.currentText()
+        angles_for_points = {}
         self.message_edit.clear()
 
         message = "Информативного сигнала не обнаружено.\n"
         for data in self.data_list:
             if data["Частота"] == frequency and data["Модуляция"] == modulation:
                 message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов\n"
+                angles_for_points[data["is_enemy"]] = 90 - data['Пеленг']
                 break
+        self.circular_scale.set_angle(angles_for_points)
 
         self.message_edit.append(message)
 
@@ -854,13 +854,15 @@ class SinGraphAnimation(QMainWindow):
 
         self.message_edit.append(f"Начинаю циклический поиск по заданному диапазону частот, по заданной модуляции.")
         messages = []
+        angles_for_points = {}
         found_frequency = None  # Переменная для хранения пойманной частоты
         for data in self.data_list:
             if data["Модуляция"] == modulation:
                 message = f"Частота: {data['Частота']} МГц\nТекст: {data['Текст']}\nПеленг: {data['Пеленг']} градусов"
-                self.circular_scale.set_angle(90 - data['Пеленг'])
+                angles_for_points[data["is_enemy"]] = 90 - data['Пеленг']
                 messages.append(message)
                 found_frequency = data['Частота']  # Сохраняем пойманную частоту
+        self.circular_scale.set_angle(angles_for_points)
 
         if messages:
             self.message_edit.append(f"Найдена ценная информация для модуляции {modulation}:\n")
